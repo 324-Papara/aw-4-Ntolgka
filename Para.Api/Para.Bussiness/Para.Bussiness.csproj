@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Para.Data\Para.Data.csproj" />
+      <ProjectReference Include="..\Para.Schema\Para.Schema.csproj" />
+    </ItemGroup>
+
+
+
+    <ItemGroup>
+        <PackageReference Include="MediatR" Version="9.0.0" />
+        <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
+        <PackageReference Include="FluentValidation.AspNetCore" Version="9.5.2" />
+        <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="9.5.2" />
+
+        <PackageReference Include="Hangfire" Version="1.8.14" />
+        <PackageReference Include="Hangfire.SqlServer" Version="1.8.14" />
+    </ItemGroup>
+    
+</Project>
