@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using AutoMapper;
 using FluentValidation.AspNetCore;
 using Hangfire;
+using Hangfire.PostgreSql;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -134,7 +135,7 @@ public class Startup
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
-            .UseSqlServerStorage(Configuration.GetConnectionString("HangfireConnection")));
+            .UsePostgreSqlStorage(Configuration.GetConnectionString("HangfireConnection")));
         services.AddHangfireServer();
         
 
@@ -184,34 +185,7 @@ public class Startup
             {
                 return next();
             }
-
-            var service1 = context.RequestServices.GetRequiredService<CustomService1>();
-            var service2 = context.RequestServices.GetRequiredService<CustomService2>();
-            var service3 = context.RequestServices.GetRequiredService<CustomService3>();
-
-            service1.Counter++;
-            service2.Counter++;
-            service3.Counter++;
-
             return next();
-        });
-
-        app.Run(async context =>
-        {
-            var service1 = context.RequestServices.GetRequiredService<CustomService1>();
-            var service2 = context.RequestServices.GetRequiredService<CustomService2>();
-            var service3 = context.RequestServices.GetRequiredService<CustomService3>();
-
-            if (!string.IsNullOrEmpty(context.Request.Path) && !context.Request.Path.Value.Contains("favicon"))
-            {
-                service1.Counter++;
-                service2.Counter++;
-                service3.Counter++;
-            }
-
-            await context.Response.WriteAsync($"Service1 : {service1.Counter}\n");
-            await context.Response.WriteAsync($"Service2 : {service2.Counter}\n");
-            await context.Response.WriteAsync($"Service3 : {service3.Counter}\n");
         });
     }
 }
