@@ -18,10 +18,12 @@ using Para.Base.Token;
 using Para.Bussiness;
 using Para.Bussiness.Cqrs;
 using Para.Bussiness.Notification;
+using Para.Bussiness.RabbitMQ;
 using Para.Bussiness.Token;
 using Para.Bussiness.Validation;
 using Para.Data.Context;
 using Para.Data.UnitOfWork;
+using Para.Schema;
 using Serilog;
 using StackExchange.Redis;
 
@@ -40,9 +42,11 @@ public class Startup
 
     public void ConfigureServices(IServiceCollection services)
     {
+        // JWTConfig
         jwtConfig = Configuration.GetSection("JwtConfig").Get<JwtConfig>();
         services.AddSingleton<JwtConfig>(jwtConfig);
 
+        // Db Connection
         var connectionStringPostgre = Configuration.GetConnectionString("PostgresSqlConnection");
         services.AddDbContext<ParaDbContext>(options => options.UseNpgsql(connectionStringPostgre));
 
@@ -54,25 +58,25 @@ public class Startup
             options.JsonSerializerOptions.WriteIndented = true;
             options.JsonSerializerOptions.PropertyNamingPolicy = null;
         });
+        //Fluent Validation Register
         services.AddControllers().AddFluentValidation(x =>
         {
             x.RegisterValidatorsFromAssemblyContaining<BaseValidator>();
         });
 
 
+        //AutoMapper Config Register
         var config = new MapperConfiguration(cfg => { cfg.AddProfile(new MapperConfig()); });
         services.AddSingleton(config.CreateMapper());
 
 
         services.AddMediatR(typeof(CreateCustomerCommand).GetTypeInfo().Assembly);
-
-        services.AddTransient<CustomService1>();
-        services.AddScoped<CustomService2>();
-        services.AddSingleton<CustomService3>();
-
+        
+        //SMTP
+        services.Configure<SmtpSettings>(Configuration.GetSection("SMTPConfig"));
+        
+        //JWT Auth
         services.AddScoped<ITokenService, TokenService>();
-        services.AddSingleton<INotificationService, NotificationService>();
-
         services.AddAuthentication(x =>
         {
             x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -94,7 +98,7 @@ public class Startup
             };
         });
 
-
+        //Swagger
         services.AddSwaggerGen(c =>
         {
             c.SwaggerDoc("v1", new OpenApiInfo { Title = "Para Api Management", Version = "v1.0" });
@@ -121,6 +125,7 @@ public class Startup
 
         services.AddMemoryCache();
 
+        //Redis Config
         var redisConfig = new ConfigurationOptions();
         redisConfig.DefaultDatabase = 0;
         redisConfig.EndPoints.Add(Configuration["Redis:Host"], Convert.ToInt32(Configuration["Redis:Port"]));
@@ -130,7 +135,25 @@ public class Startup
             opt.InstanceName = Configuration["Redis:InstanceName"];
         });
         
+        services.AddTransient<INotificationService, NotificationService>();
         
+        //RabbitMQ Config
+        services.AddSingleton<RabbitMQClient>(sp =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var rabbitMqSettings = configuration.GetSection("RabbitMQ");
+            return new RabbitMQClient(
+                rabbitMqSettings["HostName"],
+                int.Parse(rabbitMqSettings["Port"]),
+                rabbitMqSettings["UserName"],
+                rabbitMqSettings["Password"],
+                rabbitMqSettings["QueueName"]
+            );
+        });
+        
+        services.AddTransient<EmailProcessor>();  
+        
+        //Hangfire Config
         services.AddHangfire(configuration => configuration
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
             .UseSimpleAssemblyNameTypeSerializer()
@@ -138,7 +161,6 @@ public class Startup
             .UsePostgreSqlStorage(Configuration.GetConnectionString("HangfireConnection")));
         services.AddHangfireServer();
         
-
         services.AddScoped<ISessionContext>(provider =>
         {
             var context = provider.GetService<IHttpContextAccessor>();
@@ -147,6 +169,9 @@ public class Startup
             sessionContext.HttpContext = context.HttpContext;
             return sessionContext;
         });
+        
+        services.AddHttpContextAccessor();
+
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -157,10 +182,27 @@ public class Startup
             app.UseSwagger();
             app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Para.Api v1"));
         }
-
-
-        app.UseMiddleware<HeartbeatMiddleware>();
+        
+        app.UseHttpsRedirection();
+        
+        app.UseRouting();
+        
+        app.UseAuthentication();
+        app.UseAuthorization();
+        
+        app.UseHangfireDashboard();
+        
+        RecurringJob.RemoveIfExists("ProcessEmailQueue");
+        
+        RecurringJob.AddOrUpdate(
+            "ProcessEmailQueue",
+            () => app.ApplicationServices.GetRequiredService<EmailProcessor>().ProcessEmailQueue(CancellationToken.None),
+            "*/5 * * * *" // Runs every 5 minutes
+        );
+        
         app.UseMiddleware<ErrorHandlerMiddleware>();
+        app.UseMiddleware<HeartbeatMiddleware>();
+        
         Action<RequestProfilerModel> requestResponseHandler = requestProfilerModel =>
         {
             Log.Information("-------------Request-Begin------------");
@@ -170,22 +212,8 @@ public class Startup
             Log.Information("-------------Request-End------------");
         };
         app.UseMiddleware<RequestLoggingMiddleware>(requestResponseHandler);
-
-        app.UseHangfireDashboard();
-
-        app.UseHttpsRedirection();
-        app.UseAuthentication();
-        app.UseRouting();
-        app.UseAuthorization();
+        
         app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
-
-        app.Use((context, next) =>
-        {
-            if (!string.IsNullOrEmpty(context.Request.Path) && context.Request.Path.Value.Contains("favicon"))
-            {
-                return next();
-            }
-            return next();
-        });
+        
     }
 }

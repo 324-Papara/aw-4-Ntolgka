@@ -47,7 +47,6 @@ namespace Para.Api.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "admin")]
         public async Task<ApiResponse<UserResponse>> Post([FromBody] UserRequest value)
         {
             var operation = new CreateUserCommand(value);

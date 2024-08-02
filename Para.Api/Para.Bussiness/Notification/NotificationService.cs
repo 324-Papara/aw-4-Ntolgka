@@ -1,32 +1,50 @@
+using System.Net;
 using System.Net.Mail;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Para.Schema;
 
 namespace Para.Bussiness.Notification;
 
-public class NotificationService  : INotificationService
+public class NotificationService : INotificationService
 {
-    public void SendEmail(string subject, string email, string content)
+    private readonly IOptions<SmtpSettings> _smtpSettings;
+    private readonly ILogger<NotificationService> _logger;
+
+    public NotificationService(IOptions<SmtpSettings> smtpSettings, ILogger<NotificationService> logger)
     {
-        
-        SmtpClient mySmtpClient = new SmtpClient("my.smtp.exampleserver.net");
+        _smtpSettings = smtpSettings;
+        _logger = logger;
+    }
 
-        mySmtpClient.UseDefaultCredentials = false;
-        System.Net.NetworkCredential basicAuthenticationInfo = new
-            System.Net.NetworkCredential("username", "password");
-        mySmtpClient.Credentials = basicAuthenticationInfo;
+    public async Task SendEmailAsync(string subject, string email, string content)
+    {
+        var smtpSettings = _smtpSettings.Value;
+        using var smtpClient = new SmtpClient(smtpSettings.SmtpHost, smtpSettings.SmtpPort)
+        {
+            Credentials = new NetworkCredential(smtpSettings.SmtpUser, smtpSettings.SmtpPass),
+            EnableSsl = true
+        };
 
-        MailAddress from = new MailAddress("test@example.com", "TestFromName");
-        MailAddress to = new MailAddress(email, "TestToName");
-        MailMessage myMail = new System.Net.Mail.MailMessage(from, to);
-        MailAddress replyTo = new MailAddress("reply@example.com");
-        myMail.ReplyToList.Add(replyTo);
+        var mailMessage = new MailMessage
+        {
+            From = new MailAddress(smtpSettings.FromEmail),
+            Subject = subject,
+            Body = content,
+            IsBodyHtml = true,
+        };
 
-        myMail.Subject = subject;
-        myMail.SubjectEncoding = System.Text.Encoding.UTF8;
+        mailMessage.To.Add(email);
 
-        myMail.Body = "<b>Test Mail</b><br>using <b>HTML</b>." + content;
-        myMail.BodyEncoding = System.Text.Encoding.UTF8;
-        myMail.IsBodyHtml = true;
-
-        mySmtpClient.Send(myMail);
+        try
+        {
+            await smtpClient.SendMailAsync(mailMessage);
+            _logger.LogInformation("Email sent successfully to {Email}", email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending email to {Email}", email);
+            throw;
+        }
     }
 }

@@ -1,8 +1,6 @@
-using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Para.Api.Filter;
 using Para.Base.Response;
 using Para.Bussiness.Cqrs;
 using Para.Schema;

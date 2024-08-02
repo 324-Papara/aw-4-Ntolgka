@@ -3,7 +3,6 @@ using Serilog;
 
 namespace Para.Api.Middleware;
 
-
 public class ErrorHandlerMiddleware
 {
     private readonly RequestDelegate next;

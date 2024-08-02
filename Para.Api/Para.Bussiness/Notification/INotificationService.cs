@@ -2,5 +2,5 @@ namespace Para.Bussiness.Notification;
 
 public interface INotificationService
 {
-    public void SendEmail(string subject, string email, string content);
-}
+    Task SendEmailAsync(string subject, string email, string content);
+}   
